@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <title>a map of poems</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Space+Mono:wght@400&display=swap');
 
   :root{
     --paper:#efe6d2;
     --paper-2:#e8dcc4;
-    --land:#ded0ab;
     --land-edge:#c9b78e;
     --ink:#4a3f33;
     --ink-soft:#7a6d5b;
@@ -26,19 +26,7 @@
     background:var(--paper);
     color:var(--ink);
     font-family:'EB Garamond', serif;
-    overflow-x:hidden;
-  }
-
-  /* paper grain */
-  body::before{
-    content:"";
-    position:fixed;
-    inset:0;
-    z-index:0;
-    pointer-events:none;
-    opacity:0.5;
-    mix-blend-mode:multiply;
-    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.29  0 0 0 0 0.25  0 0 0 0 0.2  0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    overflow:hidden;
   }
 
   .toolbar{
@@ -46,16 +34,16 @@
     top:18px;
     left:50%;
     transform:translateX(-50%);
-    z-index:20;
+    z-index:900;
     display:flex;
     align-items:center;
     gap:8px;
-    background:rgba(239,230,210,0.88);
+    background:rgba(239,230,210,0.92);
     backdrop-filter:blur(6px);
     border:1px solid var(--land-edge);
     border-radius:22px;
     padding:6px 8px 6px 16px;
-    box-shadow:0 6px 18px rgba(74,63,51,0.14);
+    box-shadow:0 6px 18px rgba(74,63,51,0.18);
     max-width:92vw;
   }
 
@@ -71,10 +59,7 @@
   }
   #search::placeholder{ color:var(--ink-soft); opacity:0.8; }
 
-  .toolbar .divider{
-    width:1px; height:20px;
-    background:var(--land-edge);
-  }
+  .toolbar .divider{ width:1px; height:20px; background:var(--land-edge); }
 
   button{
     font-family:'EB Garamond', serif;
@@ -85,18 +70,17 @@
     padding:8px 16px;
     border-radius:16px;
     cursor:pointer;
-    transition:transform 0.15s ease, box-shadow 0.15s ease;
+    transition:transform 0.15s ease;
     white-space:nowrap;
   }
   button:hover{ transform:translateY(-1px); }
   button.primary{ background:var(--sage); color:#fbf8f0; border-color:var(--sage); }
-  button.ghost{ background:transparent; border-color:transparent; padding:8px 10px; }
 
   #hint{
     position:fixed;
     top:74px; left:50%;
     transform:translateX(-50%);
-    z-index:30;
+    z-index:900;
     background:var(--ink);
     color:var(--paper);
     font-family:'Space Mono', monospace;
@@ -110,79 +94,56 @@
   }
   #hint.show{ opacity:0.92; }
 
-  .map-wrap{
-    position:relative;
-    z-index:1;
-    width:100%;
-    height:100vh;
-    padding:0;
-  }
-
   #map{
-    position:relative;
+    position:fixed;
+    inset:0;
     width:100%;
     height:100%;
     background:var(--paper);
-    cursor:crosshair;
-    overflow:hidden;
+    z-index:1;
   }
   #map.placing{ cursor:cell; }
 
-  #map svg{ position:absolute; inset:0; width:100%; height:100%; }
-
-  .land{
-    fill:var(--land);
-    stroke:var(--land-edge);
-    stroke-width:1.1;
+  .leaflet-tile-pane{
+    filter: sepia(0.42) saturate(0.62) brightness(1.08) contrast(0.94) hue-rotate(-6deg);
+  }
+  .leaflet-container{ background:var(--paper); font-family:'EB Garamond', serif; }
+  .leaflet-control-attribution{
+    background:rgba(239,230,210,0.85) !important;
+    font-family:'Space Mono', monospace;
+    font-size:9px !important;
+    color:var(--ink-soft) !important;
+  }
+  .leaflet-control-zoom a{
+    background:rgba(239,230,210,0.92) !important;
+    color:var(--ink) !important;
+    border-color:var(--land-edge) !important;
   }
 
-  .note{
-    position:absolute;
-    width:150px;
-    transform-origin:top center;
-    z-index:5;
-    animation:drop 0.5s cubic-bezier(.2,.9,.3,1.2) both;
-  }
-  @keyframes drop{
-    from{ opacity:0; transform:translate(-50%,-40%) scale(0.85) rotate(0deg); }
-  }
-
-  .pinhead{
-    position:absolute;
-    left:50%;
-    top:-6px;
-    width:10px; height:10px;
+  .pin-dot{
+    width:12px; height:12px;
     border-radius:50%;
-    transform:translateX(-50%);
-    box-shadow:0 2px 3px rgba(0,0,0,0.35);
-    z-index:6;
+    box-shadow:0 2px 4px rgba(0,0,0,0.4), 0 0 0 3px rgba(250,246,234,0.9);
   }
+  .pin-dot.dimmed{ opacity:0.15; }
+  .pin-dot.matched{ box-shadow:0 0 0 3px var(--mustard), 0 2px 4px rgba(0,0,0,0.4); }
 
-  .card{
-    position:relative;
+  .leaflet-popup-content-wrapper{
     background:#faf6ea;
     border:1px solid rgba(74,63,51,0.15);
-    padding:14px 12px 10px;
-    box-shadow:1px 2px 6px rgba(74,63,51,0.18);
+    border-radius:2px;
+    box-shadow:1px 3px 10px rgba(74,63,51,0.25);
+  }
+  .leaflet-popup-tip{ background:#faf6ea; }
+  .leaflet-popup-content{ margin:14px 14px 10px; width:190px !important; }
+  .leaflet-popup-content .poem{
     font-family:'Caveat', cursive;
-  }
-  .card::after{
-    content:"";
-    position:absolute;
-    top:-9px; left:50%;
-    transform:translateX(-50%) rotate(-3deg);
-    width:34px; height:16px;
-    background:rgba(180,150,110,0.35);
-    border:1px solid rgba(74,63,51,0.08);
-  }
-
-  .card .poem{
-    font-size:19px;
+    font-size:20px;
     line-height:1.28;
     color:var(--ink);
     white-space:pre-line;
   }
-  .card .meta{
+  .leaflet-popup-content .meta{
     margin-top:8px;
     font-family:'Space Mono', monospace;
     font-size:9px;
@@ -193,15 +154,10 @@
     justify-content:space-between;
   }
 
-  .note:hover .card{ box-shadow:2px 4px 10px rgba(74,63,51,0.25); }
-  .note.dimmed{ opacity:0.12; filter:grayscale(0.6); pointer-events:none; }
-  .note.matched .card{ box-shadow:0 0 0 2px var(--mustard), 2px 4px 10px rgba(74,63,51,0.25); }
-
-  /* modal */
   .overlay{
     position:fixed; inset:0;
     background:rgba(74,63,51,0.28);
-    z-index:50;
+    z-index:1000;
     display:none;
     align-items:center;
     justify-content:center;
@@ -218,17 +174,8 @@
     box-shadow:0 20px 50px rgba(0,0,0,0.25);
     position:relative;
   }
-  .modal h2{
-    font-style:italic;
-    font-weight:500;
-    font-size:22px;
-    margin:0 0 4px;
-  }
-  .modal p.hintline{
-    font-size:13px;
-    color:var(--ink-soft);
-    margin:0 0 16px;
-  }
+  .modal h2{ font-style:italic; font-weight:500; font-size:22px; margin:0 0 4px; }
+  .modal p.hintline{ font-size:13px; color:var(--ink-soft); margin:0 0 16px; }
   .modal label{
     display:block;
     font-family:'Space Mono', monospace;
@@ -253,25 +200,8 @@
   .modal .row button{ flex:1; }
   .modal .close{
     position:absolute; top:10px; right:14px;
-    background:none; border:none; box-shadow:none;
+    background:none; border:none;
     font-size:20px; color:var(--ink-soft); cursor:pointer; padding:2px 6px;
-  }
-
-  footer{
-    position:relative; z-index:2;
-    text-align:center;
-    padding:0 6vw 60px;
-    font-family:'Space Mono', monospace;
-    font-size:10px;
-    letter-spacing:0.2em;
-    text-transform:uppercase;
-    color:var(--ink-soft);
-    opacity:0.7;
-  }
-
-  @media (max-width:640px){
-    .note{ width:128px; }
-    .card .poem{ font-size:17px; }
   }
 </style>
 </head>
@@ -285,9 +215,7 @@
   <button class="primary" id="addBtn">+ pin</button>
 </div>
 
-<div class="map-wrap">
-  <div id="map"></div>
-</div>
+<div id="map"></div>
 
 <div class="overlay" id="overlay">
   <div class="modal">
@@ -303,15 +231,15 @@ finally exhaling"></textarea>
     <label>sign it (optional)</label>
     <input id="signed" type="text" placeholder="initials, or leave blank" maxlength="24">
     <div class="row">
-      <button class="ghost" id="cancelBtn">cancel</button>
+      <button id="cancelBtn">cancel</button>
       <button class="primary" id="submitBtn">pin it</button>
     </div>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 (function(){
-  const map = document.getElementById('map');
   const hint = document.getElementById('hint');
   const overlay = document.getElementById('overlay');
   const addBtn = document.getElementById('addBtn');
@@ -322,56 +250,25 @@ finally exhaling"></textarea>
   const placeInput = document.getElementById('place');
   const poemInput = document.getElementById('poemText');
   const signedInput = document.getElementById('signed');
-
-  let allEntries = []; // kept in memory for search, alongside what's rendered
+  const mapEl = document.getElementById('map');
 
   const PIN_COLORS = ['#b8664a','#7c8862','#7288a0','#c99a3f'];
-  const ROTATIONS = [-6,-3,-1,2,4,6,-4,3];
 
   let placing = false;
-  let pendingPos = null;
+  let pendingLatLng = null;
+  let markers = [];
 
-  // --- Hand-wobbled world silhouette (stylised, not geographically precise) ---
-  function buildMapSVG(){
-    map.innerHTML = `
-    <svg viewBox="0 0 1000 525" preserveAspectRatio="none">
-      <defs>
-        <filter id="wobble" x="-20%" y="-20%" width="140%" height="140%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="2" seed="7" result="turb"/>
-          <feDisplacementMap in="SourceGraphic" in2="turb" scale="14"/>
-        </filter>
-        <filter id="wobble2" x="-20%" y="-20%" width="140%" height="140%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="21" result="turb"/>
-          <feDisplacementMap in="SourceGraphic" in2="turb" scale="10"/>
-        </filter>
-      </defs>
-      <g filter="url(#wobble)">
-        <!-- North America -->
-        <path class="land" d="M60,90 Q140,50 220,70 Q270,90 260,150 Q290,190 250,230 Q210,270 170,250 Q120,260 100,210 Q50,190 60,140 Z"/>
-        <!-- South America -->
-        <path class="land" d="M210,300 Q250,280 270,320 Q290,380 260,440 Q240,480 210,460 Q190,400 195,350 Z"/>
-        <!-- Europe -->
-        <path class="land" d="M470,80 Q520,60 560,80 Q580,110 550,130 Q520,150 480,130 Q450,110 470,80 Z"/>
-        <!-- Africa -->
-        <path class="land" d="M470,160 Q540,150 570,200 Q590,270 560,340 Q540,400 500,390 Q460,370 460,300 Q440,220 470,160 Z"/>
-        <!-- Asia -->
-        <path class="land" d="M600,60 Q700,40 800,70 Q860,100 840,150 Q820,190 760,180 Q700,200 650,170 Q590,140 600,60 Z"/>
-        <!-- Australia -->
-        <path class="land" d="M780,340 Q840,325 870,355 Q880,390 840,400 Q800,405 780,380 Z"/>
-      </g>
-      <g filter="url(#wobble2)" opacity="0.9">
-        <!-- Japan -->
-        <path class="land" d="M870,120 Q885,110 892,130 Q885,150 872,145 Z"/>
-        <!-- UK / Ireland -->
-        <path class="land" d="M445,75 Q455,68 460,80 Q452,92 443,86 Z"/>
-        <!-- Madagascar -->
-        <path class="land" d="M595,330 Q604,320 608,345 Q600,365 592,352 Z"/>
-        <!-- New Zealand -->
-        <path class="land" d="M900,400 Q912,395 915,412 Q905,425 897,415 Z"/>
-      </g>
-    </svg>`;
-  }
-  buildMapSVG();
+  const map = L.map('map', {
+    zoomControl:true,
+    worldCopyJump:true,
+    minZoom:2,
+    maxZoom:12
+  }).setView([20, 10], 3);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors',
+    maxZoom: 19
+  }).addTo(map);
 
   function showHint(text, autoHide){
     hint.textContent = text;
@@ -385,18 +282,15 @@ finally exhaling"></textarea>
 
   addBtn.addEventListener('click', ()=>{
     placing = true;
-    map.classList.add('placing');
+    mapEl.classList.add('placing');
     showHint('tap anywhere on the map to place your pin');
   });
 
-  map.addEventListener('click', (e)=>{
+  map.on('click', (e)=>{
     if(!placing) return;
-    const rect = map.getBoundingClientRect();
-    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
-    const yPct = ((e.clientY - rect.top) / rect.height) * 100;
-    pendingPos = { x: xPct, y: yPct };
+    pendingLatLng = e.latlng;
     placing = false;
-    map.classList.remove('placing');
+    mapEl.classList.remove('placing');
     hideHint();
     openModal();
   });
@@ -406,15 +300,67 @@ finally exhaling"></textarea>
     placeInput.value = '';
     poemInput.value = '';
     signedInput.value = '';
+    poemInput.style.borderColor = '';
     setTimeout(()=>placeInput.focus(), 50);
   }
   function shutModal(){
     overlay.classList.remove('show');
-    pendingPos = null;
+    pendingLatLng = null;
   }
   closeModal.addEventListener('click', shutModal);
   cancelBtn.addEventListener('click', shutModal);
   overlay.addEventListener('click', (e)=>{ if(e.target === overlay) shutModal(); });
+
+  function makeDotIcon(color){
+    return L.divIcon({
+      className: '',
+      html: '<div class="pin-dot" style="background:'+color+'"></div>',
+      iconSize: [12,12],
+      iconAnchor: [6,6]
+    });
+  }
+
+  function popupHTML(entry){
+    const safePoem = entry.poem.replace(/</g,'&lt;');
+    const safePlace = entry.place.replace(/</g,'&lt;');
+    const safeSigned = entry.signed ? entry.signed.replace(/</g,'&lt;') : '';
+    return '<div class="poem">'+safePoem+'</div><div class="meta"><span>'+safePlace+'</span><span>'+(safeSigned ? '— '+safeSigned : '')+'</span></div>';
+  }
+
+  function renderNote(entry){
+    if(typeof entry.lat !== 'number' || typeof entry.lng !== 'number') return;
+    const color = PIN_COLORS[Math.floor(Math.random()*PIN_COLORS.length)];
+    const icon = makeDotIcon(color);
+    const marker = L.marker([entry.lat, entry.lng], { icon }).addTo(map);
+    marker.bindPopup(popupHTML(entry));
+    markers.push({ marker, place: (entry.place||'').toLowerCase(), poem: (entry.poem||'').toLowerCase() });
+  }
+
+  function applySearch(){
+    const q = searchInput.value.trim().toLowerCase();
+    if(!q){
+      markers.forEach(m => {
+        const el = m.marker.getElement();
+        if(el){ el.querySelector('.pin-dot').classList.remove('dimmed','matched'); }
+      });
+      return;
+    }
+    let firstMatch = null;
+    markers.forEach(m => {
+      const hit = m.place.includes(q) || m.poem.includes(q);
+      const el = m.marker.getElement();
+      if(el){
+        const dot = el.querySelector('.pin-dot');
+        dot.classList.toggle('matched', hit);
+        dot.classList.toggle('dimmed', !hit);
+      }
+      if(hit && !firstMatch) firstMatch = m.marker;
+    });
+    if(firstMatch){
+      map.flyTo(firstMatch.getLatLng(), Math.max(map.getZoom(), 5), { duration: 0.8 });
+    }
+  }
+  searchInput.addEventListener('input', applySearch);
 
   submitBtn.addEventListener('click', async ()=>{
     const poem = poemInput.value.trim();
@@ -423,17 +369,16 @@ finally exhaling"></textarea>
       poemInput.placeholder = 'a poem needs at least a line...';
       return;
     }
-    if(!pendingPos){
-      // fallback: drop it somewhere gentle if no map click happened
-      pendingPos = { x: 40 + Math.random()*20, y: 40 + Math.random()*20 };
+    if(!pendingLatLng){
+      pendingLatLng = map.getCenter();
     }
     const entry = {
       id: 'poem_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
       place: placeInput.value.trim() || 'somewhere',
       poem: poem,
       signed: signedInput.value.trim(),
-      x: pendingPos.x,
-      y: pendingPos.y,
+      lat: pendingLatLng.lat,
+      lng: pendingLatLng.lng,
       ts: Date.now()
     };
 
@@ -451,84 +396,43 @@ finally exhaling"></textarea>
     submitBtn.textContent = 'pin it';
   });
 
-  function renderNote(entry){
-    const svg = map.querySelector('svg');
-    const note = document.createElement('div');
-    note.className = 'note';
-    note.style.left = entry.x + '%';
-    note.style.top = entry.y + '%';
-    const rot = ROTATIONS[Math.floor(Math.random()*ROTATIONS.length)];
-    note.style.transform = `translate(-50%,-14px) rotate(${rot}deg)`;
-    const color = PIN_COLORS[Math.floor(Math.random()*PIN_COLORS.length)];
-
-    note.innerHTML = `
-      <div class="pinhead" style="background:${color}"></div>
-      <div class="card">
-        <div class="poem"></div>
-        <div class="meta"><span class="place"></span><span class="signed"></span></div>
-      </div>
-    `;
-    note.querySelector('.poem').textContent = entry.poem;
-    note.querySelector('.place').textContent = entry.place;
-    note.querySelector('.signed').textContent = entry.signed ? '— ' + entry.signed : '';
-    note.dataset.place = (entry.place || '').toLowerCase();
-    note.dataset.poem = (entry.poem || '').toLowerCase();
-    map.appendChild(note);
-    allEntries.push(note);
-  }
-
-  function applySearch(){
-    const q = searchInput.value.trim().toLowerCase();
-    if(!q){
-      allEntries.forEach(n => n.classList.remove('dimmed','matched'));
-      return;
-    }
-    allEntries.forEach(n => {
-      const hit = n.dataset.place.includes(q) || n.dataset.poem.includes(q);
-      n.classList.toggle('matched', hit);
-      n.classList.toggle('dimmed', !hit);
-    });
-  }
-  searchInput.addEventListener('input', applySearch);
-
   async function loadPoems(){
-    map.querySelectorAll('.note').forEach(n => n.remove());
-    allEntries = [];
+    markers.forEach(m => map.removeLayer(m.marker));
+    markers = [];
     try{
       const listResult = await window.storage.list('poem:', true);
       const keys = (listResult && listResult.keys) ? listResult.keys : [];
       if(keys.length === 0){
-        seedIfEmpty();
+        await seedIfEmpty();
         return;
       }
       for(const key of keys){
         try{
           const res = await window.storage.get(key, true);
           if(res && res.value){
-            const entry = JSON.parse(res.value);
-            renderNote(entry);
+            renderNote(JSON.parse(res.value));
           }
-        }catch(e){ /* skip missing key */ }
+        }catch(e){ }
       }
     }catch(err){
-      seedIfEmpty();
+      await seedIfEmpty();
     }
   }
 
   async function seedIfEmpty(){
     const seeds = [
-      { place:'Lisbon', poem:'the tide takes\nwhat the hands\ncannot hold', signed:'m.', x:44, y:11 },
-      { place:'Kyoto', poem:'the moss does not\nask permission\nto grow', signed:'', x:87, y:16 },
-      { place:'Oaxaca', poem:'grief, too,\nripens on the vine\nif you let it', signed:'r.d.', x:22, y:34 },
-      { place:'Cape Town', poem:'the mountain\ndoes not flinch\nat the weather', signed:'', x:52, y:36 },
-      { place:'a kitchen in Ohio', poem:'my mother\'s hands\nsmelled like flour\nand certainty', signed:'j.', x:19, y:16 },
-      { place:'Wellington', poem:'the wind here\nhas an opinion\nabout everything', signed:'', x:90, y:44 }
+      { place:'Lisbon', poem:'the tide takes\nwhat the hands\ncannot hold', signed:'m.', lat:38.72, lng:-9.14 },
+      { place:'Kyoto', poem:'the moss does not\nask permission\nto grow', signed:'', lat:35.01, lng:135.77 },
+      { place:'Oaxaca', poem:'grief, too,\nripens on the vine\nif you let it', signed:'r.d.', lat:17.06, lng:-96.73 },
+      { place:'Cape Town', poem:'the mountain\ndoes not flinch\nat the weather', signed:'', lat:-33.92, lng:18.42 },
+      { place:'a kitchen in Ohio', poem:"my mother's hands\nsmelled like flour\nand certainty", signed:'j.', lat:40.37, lng:-82.99 },
+      { place:'Wellington', poem:'the wind here\nhas an opinion\nabout everything', signed:'', lat:-41.29, lng:174.78 }
     ];
     for(const s of seeds){
       const entry = {
         id: 'poem_seed_' + Math.random().toString(36).slice(2,9),
         place: s.place, poem: s.poem, signed: s.signed,
-        x: s.x, y: s.y, ts: Date.now()
+        lat: s.lat, lng: s.lng, ts: Date.now()
       };
       try{ await window.storage.set('poem:' + entry.id, JSON.stringify(entry), true); }catch(e){}
       renderNote(entry);
