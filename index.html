@@ -54,7 +54,7 @@
     border:none;
     outline:none;
     color:var(--ink);
-    width:180px;
+    width:210px;
     padding:6px 4px;
   }
   #search::placeholder{ color:var(--ink-soft); opacity:0.8; }
@@ -91,8 +91,28 @@
     opacity:0;
     pointer-events:none;
     transition:opacity 0.25s ease;
+    text-align:center;
+    max-width:80vw;
   }
   #hint.show{ opacity:0.92; }
+
+  #coordReadout{
+    position:fixed;
+    bottom:16px; left:50%;
+    transform:translateX(-50%);
+    z-index:900;
+    background:rgba(74,63,51,0.9);
+    color:var(--paper);
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.03em;
+    padding:6px 14px;
+    border-radius:12px;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.2s ease;
+  }
+  #coordReadout.show{ opacity:0.9; }
 
   #map{
     position:fixed;
@@ -127,6 +147,14 @@
   }
   .pin-dot.dimmed{ opacity:0.15; }
   .pin-dot.matched{ box-shadow:0 0 0 3px var(--mustard), 0 2px 4px rgba(0,0,0,0.4); }
+  .pin-dot.story::after{
+    content:"✦";
+    position:absolute;
+    top:-13px; left:50%;
+    transform:translateX(-50%);
+    font-size:10px;
+    color:var(--mustard);
+  }
 
   .leaflet-popup-content-wrapper{
     background:#faf6ea;
@@ -135,13 +163,29 @@
     box-shadow:1px 3px 10px rgba(74,63,51,0.25);
   }
   .leaflet-popup-tip{ background:#faf6ea; }
-  .leaflet-popup-content{ margin:14px 14px 10px; width:190px !important; }
+  .leaflet-popup-content{ margin:14px 14px 10px; width:210px !important; }
   .leaflet-popup-content .poem{
     font-family:'Caveat', cursive;
     font-size:20px;
     line-height:1.28;
     color:var(--ink);
     white-space:pre-line;
+  }
+  .leaflet-popup-content .tags{
+    margin-top:8px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:5px;
+  }
+  .leaflet-popup-content .tag{
+    font-family:'Space Mono', monospace;
+    font-size:9px;
+    letter-spacing:0.03em;
+    color:var(--sage);
+    background:rgba(124,136,98,0.12);
+    border:1px solid rgba(124,136,98,0.3);
+    padding:2px 7px;
+    border-radius:10px;
   }
   .leaflet-popup-content .meta{
     margin-top:8px;
@@ -162,6 +206,7 @@
     align-items:center;
     justify-content:center;
     padding:20px;
+    overflow-y:auto;
   }
   .overlay.show{ display:flex; }
 
@@ -173,6 +218,7 @@
     padding:26px 24px 20px;
     box-shadow:0 20px 50px rgba(0,0,0,0.25);
     position:relative;
+    margin:auto;
   }
   .modal h2{ font-style:italic; font-weight:500; font-size:22px; margin:0 0 4px; }
   .modal p.hintline{ font-size:13px; color:var(--ink-soft); margin:0 0 16px; }
@@ -196,6 +242,14 @@
     resize:vertical;
   }
   .modal textarea{ min-height:110px; font-family:'Caveat', cursive; font-size:20px; line-height:1.3; }
+  .modal .coordRow{ display:flex; gap:10px; }
+  .modal .coordRow > div{ flex:1; }
+  .modal .coordNote{
+    font-family:'Space Mono', monospace;
+    font-size:10px;
+    color:var(--ink-soft);
+    margin-top:4px;
+  }
   .modal .row{ display:flex; gap:10px; margin-top:20px; }
   .modal .row button{ flex:1; }
   .modal .close{
@@ -208,10 +262,13 @@
 <body>
 
 <div id="hint"></div>
+<div id="coordReadout"></div>
 
 <div class="toolbar">
-  <input id="search" type="text" placeholder="search place or poem…">
+  <input id="search" type="text" placeholder="search place, poem, or theme…">
   <div class="divider"></div>
+  <button id="pasteBtn" title="Paste copied note text">📋 paste</button>
+  <button id="voiceBtn" title="Speak a poem or note">🎙️ voice</button>
   <button class="primary" id="addBtn">+ pin</button>
 </div>
 
@@ -222,17 +279,44 @@
     <button class="close" id="closeModal">×</button>
     <h2>pin your poem</h2>
     <p class="hintline">This will be visible to everyone who opens this map.</p>
+
     <label>where are you (roughly)?</label>
     <input id="place" type="text" placeholder="e.g. Lisbon, or just — the kitchen table" maxlength="60">
+
+    <label>coordinates</label>
+    <div class="coordRow">
+      <div><input id="latInput" type="number" step="0.0001" placeholder="lat"></div>
+      <div><input id="lngInput" type="number" step="0.0001" placeholder="lng"></div>
+    </div>
+    <div class="coordNote">filled in automatically from where you clicked — or type your own to drop a pin anywhere</div>
+
     <label>your poem, or a line of one</label>
     <textarea id="poemText" maxlength="280" placeholder="the rain here
 sounds like someone
 finally exhaling"></textarea>
+
+    <label>tags (optional, comma separated)</label>
+    <input id="tagsInput" type="text" placeholder="e.g. grief, hope, morning">
+
     <label>sign it (optional)</label>
     <input id="signed" type="text" placeholder="initials, or leave blank" maxlength="24">
+
     <div class="row">
       <button id="cancelBtn">cancel</button>
       <button class="primary" id="submitBtn">pin it</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="voiceOverlay">
+  <div class="modal" id="voiceModal">
+    <button class="close" id="closeVoice">×</button>
+    <h2>speak your poem</h2>
+    <p class="hintline" id="voiceStatus">Tap the mic and start talking. Tap again to stop.</p>
+    <div id="voiceTranscript" style="min-height:100px; font-family:'Caveat',cursive; font-size:20px; line-height:1.35; color:var(--ink); background:var(--paper); border:1px solid var(--land-edge); padding:12px; white-space:pre-line;"></div>
+    <div class="row">
+      <button id="micBtn" style="flex:1;">🎙️ start</button>
+      <button class="primary" id="useTranscriptBtn" style="flex:1;">use this</button>
     </div>
   </div>
 </div>
@@ -241,8 +325,17 @@ finally exhaling"></textarea>
 <script>
 (function(){
   const hint = document.getElementById('hint');
+  const coordReadout = document.getElementById('coordReadout');
   const overlay = document.getElementById('overlay');
   const addBtn = document.getElementById('addBtn');
+  const pasteBtn = document.getElementById('pasteBtn');
+  const voiceBtn = document.getElementById('voiceBtn');
+  const voiceOverlay = document.getElementById('voiceOverlay');
+  const closeVoice = document.getElementById('closeVoice');
+  const voiceStatus = document.getElementById('voiceStatus');
+  const voiceTranscript = document.getElementById('voiceTranscript');
+  const micBtn = document.getElementById('micBtn');
+  const useTranscriptBtn = document.getElementById('useTranscriptBtn');
   const searchInput = document.getElementById('search');
   const closeModal = document.getElementById('closeModal');
   const cancelBtn = document.getElementById('cancelBtn');
@@ -250,13 +343,16 @@ finally exhaling"></textarea>
   const placeInput = document.getElementById('place');
   const poemInput = document.getElementById('poemText');
   const signedInput = document.getElementById('signed');
+  const tagsInput = document.getElementById('tagsInput');
+  const latInput = document.getElementById('latInput');
+  const lngInput = document.getElementById('lngInput');
   const mapEl = document.getElementById('map');
 
   const PIN_COLORS = ['#b8664a','#7c8862','#7288a0','#c99a3f'];
 
   let placing = false;
-  let pendingLatLng = null;
   let markers = [];
+  let storageOk = true;
 
   const map = L.map('map', {
     zoomControl:true,
@@ -275,7 +371,7 @@ finally exhaling"></textarea>
     hint.classList.add('show');
     if(autoHide){
       clearTimeout(showHint._t);
-      showHint._t = setTimeout(()=>hint.classList.remove('show'), 2600);
+      showHint._t = setTimeout(()=>hint.classList.remove('show'), 2800);
     }
   }
   function hideHint(){ hint.classList.remove('show'); }
@@ -283,57 +379,76 @@ finally exhaling"></textarea>
   addBtn.addEventListener('click', ()=>{
     placing = true;
     mapEl.classList.add('placing');
-    showHint('tap anywhere on the map to place your pin');
+    showHint('tap anywhere on the map to place your pin — or open the form and type coordinates directly');
+    coordReadout.classList.add('show');
+    coordReadout.textContent = 'move your cursor over the map…';
+  });
+
+  map.on('mousemove', (e)=>{
+    if(!placing) return;
+    coordReadout.textContent = e.latlng.lat.toFixed(4) + ', ' + e.latlng.lng.toFixed(4);
   });
 
   map.on('click', (e)=>{
     if(!placing) return;
-    pendingLatLng = e.latlng;
     placing = false;
     mapEl.classList.remove('placing');
     hideHint();
-    openModal();
+    coordReadout.classList.remove('show');
+    openModal(e.latlng);
   });
 
-  function openModal(){
+  function openModal(latlng){
     overlay.classList.add('show');
     placeInput.value = '';
     poemInput.value = '';
     signedInput.value = '';
+    tagsInput.value = '';
     poemInput.style.borderColor = '';
+    const c = latlng || map.getCenter();
+    latInput.value = c.lat.toFixed(4);
+    lngInput.value = c.lng.toFixed(4);
     setTimeout(()=>placeInput.focus(), 50);
   }
   function shutModal(){
     overlay.classList.remove('show');
-    pendingLatLng = null;
   }
   closeModal.addEventListener('click', shutModal);
   cancelBtn.addEventListener('click', shutModal);
   overlay.addEventListener('click', (e)=>{ if(e.target === overlay) shutModal(); });
 
-  function makeDotIcon(color){
+  function makeDotIcon(color, isStory){
     return L.divIcon({
       className: '',
-      html: '<div class="pin-dot" style="background:'+color+'"></div>',
+      html: '<div class="pin-dot'+(isStory ? ' story' : '')+'" style="background:'+color+'; position:relative;"></div>',
       iconSize: [12,12],
       iconAnchor: [6,6]
     });
   }
 
+  function esc(s){ return (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
   function popupHTML(entry){
-    const safePoem = entry.poem.replace(/</g,'&lt;');
-    const safePlace = entry.place.replace(/</g,'&lt;');
-    const safeSigned = entry.signed ? entry.signed.replace(/</g,'&lt;') : '';
-    return '<div class="poem">'+safePoem+'</div><div class="meta"><span>'+safePlace+'</span><span>'+(safeSigned ? '— '+safeSigned : '')+'</span></div>';
+    const tagsHTML = (entry.tags && entry.tags.length)
+      ? '<div class="tags">' + entry.tags.map(t => '<span class="tag">'+esc(t)+'</span>').join('') + '</div>'
+      : '';
+    return '<div class="poem">'+esc(entry.poem)+'</div>'
+      + tagsHTML
+      + '<div class="meta"><span>'+esc(entry.place)+'</span><span>'+(entry.signed ? '— '+esc(entry.signed) : '')+'</span></div>';
   }
 
   function renderNote(entry){
     if(typeof entry.lat !== 'number' || typeof entry.lng !== 'number') return;
     const color = PIN_COLORS[Math.floor(Math.random()*PIN_COLORS.length)];
-    const icon = makeDotIcon(color);
+    const icon = makeDotIcon(color, !!entry.isStory);
     const marker = L.marker([entry.lat, entry.lng], { icon }).addTo(map);
     marker.bindPopup(popupHTML(entry));
-    markers.push({ marker, place: (entry.place||'').toLowerCase(), poem: (entry.poem||'').toLowerCase() });
+    markers.push({
+      marker,
+      place: (entry.place||'').toLowerCase(),
+      poem: (entry.poem||'').toLowerCase(),
+      tags: (entry.tags||[]).join(' ').toLowerCase()
+    });
   }
 
   function applySearch(){
@@ -341,18 +456,20 @@ finally exhaling"></textarea>
     if(!q){
       markers.forEach(m => {
         const el = m.marker.getElement();
-        if(el){ el.querySelector('.pin-dot').classList.remove('dimmed','matched'); }
+        if(el){ const d = el.querySelector('.pin-dot'); if(d) d.classList.remove('dimmed','matched'); }
       });
       return;
     }
     let firstMatch = null;
     markers.forEach(m => {
-      const hit = m.place.includes(q) || m.poem.includes(q);
+      const hit = m.place.includes(q) || m.poem.includes(q) || m.tags.includes(q);
       const el = m.marker.getElement();
       if(el){
         const dot = el.querySelector('.pin-dot');
-        dot.classList.toggle('matched', hit);
-        dot.classList.toggle('dimmed', !hit);
+        if(dot){
+          dot.classList.toggle('matched', hit);
+          dot.classList.toggle('dimmed', !hit);
+        }
       }
       if(hit && !firstMatch) firstMatch = m.marker;
     });
@@ -369,77 +486,219 @@ finally exhaling"></textarea>
       poemInput.placeholder = 'a poem needs at least a line...';
       return;
     }
-    if(!pendingLatLng){
-      pendingLatLng = map.getCenter();
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+    if(isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180){
+      latInput.style.borderColor = '#b8664a';
+      lngInput.style.borderColor = '#b8664a';
+      return;
     }
+    const tags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0,5);
+
     const entry = {
       id: 'poem_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
       place: placeInput.value.trim() || 'somewhere',
       poem: poem,
       signed: signedInput.value.trim(),
-      lat: pendingLatLng.lat,
-      lng: pendingLatLng.lng,
+      tags: tags,
+      lat: lat,
+      lng: lng,
       ts: Date.now()
     };
 
     submitBtn.disabled = true;
     submitBtn.textContent = 'pinning…';
+    renderNote(entry); // show immediately regardless of storage outcome
     try{
-      await window.storage.set('poem:' + entry.id, JSON.stringify(entry), true);
-      renderNote(entry);
+      if(storageOk){
+        await window.storage.set('poem:' + entry.id, JSON.stringify(entry), true);
+      }
       shutModal();
       showHint('pinned. thank you for adding to the map.', true);
     }catch(err){
-      showHint('could not save just now — try again in a moment', true);
+      shutModal();
+      showHint('pinned for this session — could not save it permanently just now', true);
     }
     submitBtn.disabled = false;
     submitBtn.textContent = 'pin it';
   });
 
-  async function loadPoems(){
-    markers.forEach(m => map.removeLayer(m.marker));
-    markers = [];
+  // Always-present uplifting seed stories, shown immediately regardless of storage —
+  // guarantees the map never looks empty even if shared storage has a hiccup.
+  const UPLIFTING_SEEDS = [
+    { place:'Lisbon', poem:'the tide takes\nwhat the hands release,\nand still leaves shells', signed:'m.', tags:['gratitude','sea'], lat:38.72, lng:-9.14, isStory:true },
+    { place:'Kyoto', poem:'the moss does not\nask permission to grow —\nit just keeps going', signed:'', tags:['patience','nature'], lat:35.01, lng:135.77, isStory:true },
+    { place:'Oaxaca', poem:'grief, too, ripens\non the vine, if you let it —\nthen turns into wine', signed:'r.d.', tags:['grief','healing'], lat:17.06, lng:-96.73, isStory:true },
+    { place:'Cape Town', poem:'the mountain stands\nthrough every kind of weather —\nso, today, will I', signed:'', tags:['resilience'], lat:-33.92, lng:18.42, isStory:true },
+    { place:'a kitchen in Ohio', poem:"my mother's hands\nsmelled like flour and certainty —\nI bake the same way", signed:'j.', tags:['family','memory'], lat:40.37, lng:-82.99, isStory:true },
+    { place:'Wellington', poem:'the wind here argues\nwith everything all day long —\nand still, spring arrives', signed:'', tags:['hope'], lat:-41.29, lng:174.78, isStory:true },
+    { place:'a hospital in Nairobi', poem:'she came home today.\nthe whole street brought soup and songs —\nwe are never alone', signed:'a.k.', tags:['community','recovery'], lat:-1.29, lng:36.82, isStory:true },
+    { place:'Seoul', poem:'first winter alone —\nthen a stranger shared her scarf.\nkindness finds a way', signed:'', tags:['kindness','strangers'], lat:37.57, lng:126.98, isStory:true },
+    { place:'a bus in São Paulo', poem:'lost my job that day.\nan old man said, keep going, friend —\nI still think of him', signed:'t.', tags:['hope','strangers'], lat:-23.55, lng:-46.63, isStory:true },
+    { place:'Reykjavík', poem:'the dark lasted months.\nthen one morning, light returned —\nit always does, love', signed:'', tags:['hope','light'], lat:64.15, lng:-21.94, isStory:true }
+  ];
+
+  UPLIFTING_SEEDS.forEach(renderNote);
+
+  async function loadSharedPoems(){
     try{
       const listResult = await window.storage.list('poem:', true);
       const keys = (listResult && listResult.keys) ? listResult.keys : [];
-      if(keys.length === 0){
-        await seedIfEmpty();
-        return;
-      }
       for(const key of keys){
         try{
           const res = await window.storage.get(key, true);
           if(res && res.value){
-            renderNote(JSON.parse(res.value));
+            const entry = JSON.parse(res.value);
+            if(!entry.isStory) renderNote(entry); // avoid duplicating local seeds if they were ever persisted
           }
         }catch(e){ }
       }
     }catch(err){
-      await seedIfEmpty();
+      storageOk = false;
+      showHint('shared pins are running in local-only mode right now — new pins will still show for you', true);
     }
   }
 
-  async function seedIfEmpty(){
-    const seeds = [
-      { place:'Lisbon', poem:'the tide takes\nwhat the hands\ncannot hold', signed:'m.', lat:38.72, lng:-9.14 },
-      { place:'Kyoto', poem:'the moss does not\nask permission\nto grow', signed:'', lat:35.01, lng:135.77 },
-      { place:'Oaxaca', poem:'grief, too,\nripens on the vine\nif you let it', signed:'r.d.', lat:17.06, lng:-96.73 },
-      { place:'Cape Town', poem:'the mountain\ndoes not flinch\nat the weather', signed:'', lat:-33.92, lng:18.42 },
-      { place:'a kitchen in Ohio', poem:"my mother's hands\nsmelled like flour\nand certainty", signed:'j.', lat:40.37, lng:-82.99 },
-      { place:'Wellington', poem:'the wind here\nhas an opinion\nabout everything', signed:'', lat:-41.29, lng:174.78 }
-    ];
-    for(const s of seeds){
-      const entry = {
-        id: 'poem_seed_' + Math.random().toString(36).slice(2,9),
-        place: s.place, poem: s.poem, signed: s.signed,
-        lat: s.lat, lng: s.lng, ts: Date.now()
-      };
-      try{ await window.storage.set('poem:' + entry.id, JSON.stringify(entry), true); }catch(e){}
-      renderNote(entry);
+  pasteBtn.addEventListener('click', async ()=>{
+    try{
+      const text = await navigator.clipboard.readText();
+      if(!text || !text.trim()){
+        showHint('clipboard looks empty — copy a note first', true);
+        return;
+      }
+      openModal(null);
+      poemInput.value = text.trim().slice(0, 280);
+      showHint('pasted — check it over, then pin it', true);
+    }catch(err){
+      showHint('couldn\'t read the clipboard — your browser may need permission, or try the form directly', true);
+    }
+  });
+
+  // --- Support prefilling from a URL, so an iOS Shortcut (Share Sheet → get text
+  // + current location → open this page's URL with these params) can hand off
+  // a note with almost no typing required. Nothing auto-submits; the person
+  // still confirms with "pin it".
+  function prefillFromURL(){
+    const params = new URLSearchParams(window.location.search);
+    const poem = params.get('poem');
+    if(!poem) return;
+    openModal(null);
+    poemInput.value = poem.slice(0, 280);
+    if(params.get('place')) placeInput.value = params.get('place').slice(0, 60);
+    if(params.get('tags')) tagsInput.value = params.get('tags').slice(0, 100);
+    if(params.get('signed')) signedInput.value = params.get('signed').slice(0, 24);
+    const lat = parseFloat(params.get('lat'));
+    const lng = parseFloat(params.get('lng'));
+    if(!isNaN(lat) && !isNaN(lng)){
+      latInput.value = lat.toFixed(4);
+      lngInput.value = lng.toFixed(4);
+      map.setView([lat, lng], 6);
+    }
+    showHint('brought in from your note — check it over, then pin it', true);
+  }
+
+  // --- Voice notes: live speech-to-text via the browser's Web Speech API.
+  // Support varies by browser, so we fail gracefully with a clear fallback.
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognizer = null;
+  let listening = false;
+  let finalTranscript = '';
+
+  voiceBtn.addEventListener('click', ()=>{
+    voiceOverlay.classList.add('show');
+    voiceTranscript.textContent = '';
+    finalTranscript = '';
+    if(!SpeechRecognitionImpl){
+      voiceStatus.textContent = 'Live voice-to-text isn\u2019t supported in this browser. Easiest workaround: use your phone\u2019s built-in dictation (the mic key on the keyboard) in the poem field, or dictate into Notes and use \ud83d\udccb paste instead.';
+      micBtn.style.display = 'none';
+      useTranscriptBtn.style.display = 'none';
+      return;
+    }
+    voiceStatus.textContent = 'Tap the mic and start talking. Tap again to stop.';
+    micBtn.style.display = '';
+    useTranscriptBtn.style.display = '';
+    micBtn.textContent = '\ud83c\udf99\ufe0f start';
+  });
+
+  closeVoice.addEventListener('click', ()=>{
+    if(listening) stopListening();
+    voiceOverlay.classList.remove('show');
+  });
+  voiceOverlay.addEventListener('click', (e)=>{
+    if(e.target === voiceOverlay){
+      if(listening) stopListening();
+      voiceOverlay.classList.remove('show');
+    }
+  });
+
+  function startListening(){
+    recognizer = new SpeechRecognitionImpl();
+    recognizer.continuous = true;
+    recognizer.interimResults = true;
+    recognizer.lang = 'en-US';
+
+    recognizer.onresult = (event)=>{
+      let interim = '';
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const chunk = event.results[i][0].transcript;
+        if(event.results[i].isFinal){
+          finalTranscript += chunk + ' ';
+        }else{
+          interim += chunk;
+        }
+      }
+      voiceTranscript.textContent = (finalTranscript + interim).trim();
+    };
+    recognizer.onerror = ()=>{
+      voiceStatus.textContent = 'Had trouble hearing that — check microphone permissions and try again.';
+      stopListening();
+    };
+    recognizer.onend = ()=>{
+      if(listening){
+        // some browsers stop after a pause; restart seamlessly while still "listening"
+        try{ recognizer.start(); }catch(e){}
+      }
+    };
+
+    try{
+      recognizer.start();
+      listening = true;
+      micBtn.textContent = '\u23f9\ufe0f stop';
+      voiceStatus.textContent = 'Listening… speak whenever you\u2019re ready.';
+    }catch(e){
+      voiceStatus.textContent = 'Could not start the microphone.';
     }
   }
 
-  loadPoems();
+  function stopListening(){
+    listening = false;
+    if(recognizer){
+      try{ recognizer.stop(); }catch(e){}
+    }
+    micBtn.textContent = '\ud83c\udf99\ufe0f start';
+    voiceStatus.textContent = 'Tap the mic to keep going, or use this transcript below.';
+  }
+
+  micBtn.addEventListener('click', ()=>{
+    if(!listening) startListening();
+    else stopListening();
+  });
+
+  useTranscriptBtn.addEventListener('click', ()=>{
+    if(listening) stopListening();
+    const text = voiceTranscript.textContent.trim();
+    voiceOverlay.classList.remove('show');
+    if(!text){
+      showHint('nothing was transcribed yet — try again', true);
+      return;
+    }
+    openModal(null);
+    poemInput.value = text.slice(0, 280);
+    showHint('transcribed — check it over, then pin it', true);
+  });
+
+  loadSharedPoems();
+  prefillFromURL();
 })();
 </script>
 
